@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Swagger UI - НКМТ ↔ ВетИС API</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css">
+    <style>
+        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { margin: 0; background: #fafafa; }
+        #swagger-ui { padding: 20px; }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            // Спецификация OpenAPI
+            const spec = {
+                "openapi": "3.0.3",
+                "info": {
+                    "title": "API интеграции НКМТ и ВетИС",
+                    "description": "REST API для асинхронного взаимодействия между Национальным Каталогом Маркированных Товаров (НКМТ) и ветеринарной информационной системой (ВетИС)",
+                    "version": "1.0.0"
+                },
+                "servers": [
+                    {
+                        "url": "https://vetis-api-test.ru",
+                        "description": "Тестовый сервер"
+                    },
+                    {
+                        "url": "http://localhost:3000",
+                        "description": "Локальный мок-сервер"
+                    }
+                ],
+                "paths": {
+                    "/api/v1/requests": {
+                        "post": {
+                            "summary": "Создание нового запроса на синхронизацию данных",
+                            "description": "Метод для инициации асинхронной операции синхронизации данных между НКМТ и ВетИС",
+                            "operationId": "createSyncRequest",
+                            "requestBody": {
+                                "required": true,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "operationType": {
+                                                    "type": "string",
+                                                    "enum": ["TYPE.01", "TYPE.02", "TYPE.03", "TYPE.04", "TYPE.05", "TYPE.06", "TYPE.07", "TYPE.08", "TYPE.09", "TYPE.10", "TYPE.11", "TYPE.12", "TYPE.15", "INT.02", "INT.03", "INT.05", "INT.06"],
+                                                    "description": "Тип операции"
+                                                },
+                                                "initiatedAt": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "description": "Дата и время инициации запроса"
+                                                },
+                                                "payload": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "ownerInn": {
+                                                            "type": "string",
+                                                            "description": "ИНН владельца GTIN"
+                                                        },
+                                                        "gtin": {
+                                                            "type": "string",
+                                                            "description": "GTIN товара"
+                                                        },
+                                                        "status": {
+                                                            "type": "string",
+                                                            "enum": ["Черновик", "На_модерации", "Требует_изменений", "Ожидает_подписания", "Опубликована", "В_архиве", "Аннулирована"],
+                                                            "description": "Статус карточки"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "examples": {
+                                            "type01_example": {
+                                                "summary": "TYPE.01 - Новый GTIN",
+                                                "value": {
+                                                    "operationType": "TYPE.01",
+                                                    "initiatedAt": "2024-01-15T10:30:00Z",
+                                                    "payload": {
+                                                        "ownerInn": "1234567890",
+                                                        "gtin": "04630012345678",
+                                                        "status": "Черновик"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "responses": {
+                                "202": {
+                                    "description": "Запрос успешно принят в обработку",
+                                    "content": {
+                                        "application/json": {
+                                            "schema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "requestId": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "status": {
+                                                        "type": "string",
+                                                        "enum": ["ACCEPTED"]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "/api/v1/requests/{requestId}": {
+                        "get": {
+                            "summary": "Получение статуса и результатов обработки запроса",
+                            "description": "Метод для проверки статуса обработки асинхронного запроса",
+                            "operationId": "getRequestStatus",
+                            "parameters": [
+                                {
+                                    "name": "requestId",
+                                    "in": "path",
+                                    "required": true,
+                                    "schema": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                    }
+                                }
+                            ],
+                            "responses": {
+                                "200": {
+                                    "description": "Информация о статусе запроса",
+                                    "content": {
+                                        "application/json": {
+                                            "schema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "requestId": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "status": {
+                                                        "type": "string",
+                                                        "enum": ["PENDING", "IN_PROGRESS", "COMPLETED_SUCCESS", "COMPLETED_WITH_ERRORS", "FAILED"]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Инициализация Swagger UI
+            const ui = SwaggerUIBundle({
+                spec: spec,
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                requestInterceptor: function(request) {
+                    // Добавляем заголовки для обхода CORS
+                    request.headers['Content-Type'] = 'application/json';
+                    request.headers['Accept'] = 'application/json';
+                    request.headers['X-API-Key'] = 'test-api-key-12345';
+                    
+                    // Для локального тестирования можно использовать мок-сервер
+                    if (request.url.includes('localhost') || request.url.includes('127.0.0.1')) {
+                        console.log('Локальный запрос:', request);
+                    }
+                    
+                    return request;
+                },
+                responseInterceptor: function(response) {
+                    console.log('Ответ:', response);
+                    return response;
+                }
+            });
+
+            // Добавляем кнопку для переключения между серверами
+            const serverSelect = document.createElement('select');
+            serverSelect.id = 'server-select';
+            serverSelect.style.margin = '10px';
+            serverSelect.style.padding = '5px';
+            
+            const servers = [
+                { url: 'https://vetis-api-test.ru', name: 'Тестовый сервер' },
+                { url: 'http://localhost:3000', name: 'Локальный мок-сервер' }
+            ];
+
+            servers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.url;
+                option.textContent = server.name;
+                serverSelect.appendChild(option);
+            });
+
+            serverSelect.addEventListener('change', function() {
+                ui.specActions.updateUrl(this.value);
+            });
+
+            const swaggerContainer = document.getElementById('swagger-ui');
+            swaggerContainer.parentNode.insertBefore(serverSelect, swaggerContainer);
+
+            // Добавляем информацию о тестировании
+            const infoDiv = document.createElement('div');
+            infoDiv.style.background = '#e8f4fd';
+            infoDiv.style.padding = '15px';
+            infoDiv.style.marginBottom = '20px';
+            infoDiv.style.borderRadius = '5px';
+            infoDiv.innerHTML = `
+                <h3>Инструкция по тестированию:</h3>
+                <p><strong>1. Для тестирования без CORS ошибок:</strong></p>
+                <ul>
+                    <li>Выберите "Локальный мок-сервер" в выпадающем списке выше</li>
+                    <li>Используйте тестовые данные из примеров</li>
+                    <li>Для проверки статуса используйте requestId: <code>550e8400-e29b-41d4-a716-446655440000</code></li>
+                </ul>
+                <p><strong>2. Тестовые данные:</strong></p>
+                <ul>
+                    <li>API ключ: <code>test-api-key-12345</code></li>
+                    <li>ИНН владельца: <code>1234567890</code></li>
+                    <li>GTIN: <code>04630012345678</code></li>
+                </ul>
+            `;
+            swaggerContainer.parentNode.insertBefore(infoDiv, swaggerContainer);
+        };
+    </script>
+</body>
+</html>
