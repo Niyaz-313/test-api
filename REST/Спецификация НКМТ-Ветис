@@ -1,0 +1,1145 @@
+openapi: 3.0.3
+info:
+  title: API интеграции НКМТ и ВетИС
+  description: |
+    REST API для асинхронного взаимодействия между Национальным Каталогом Маркированных Товаров (НКМТ)
+    и ветеринарной информационной системой (ВетИС) для синхронизации данных о продукции.
+  version: 1.0.0
+  contact:
+    name: Техническая поддержка ВетИС
+    email: support@vetis.ru
+    url: https://vetis.ru/support
+  license:
+    name: Proprietary
+    url: https://vetis.ru/license
+
+servers:
+  - url: https://vetis-api.ru
+    description: Продуктивный сервер
+  - url: https://vetis-api-test.ru
+    description: Тестовый сервер
+  - url: https://vetis-api-dev.ru
+    description: Сервер разработки
+
+tags:
+  - name: requests
+    description: Операции управления запросами синхронизации
+  - name: status
+    description: Операции проверки статуса запросов
+
+paths:
+  /api/v1/requests:
+    post:
+      tags:
+        - requests
+      summary: Создание нового запроса на синхронизацию данных
+      description: |
+        Метод для инициации асинхронной операции синхронизации данных между НКМТ и ВетИС.
+        Поддерживает все типы операций (TYPE.01-TYPE.15, INT.02, INT.03, INT.05, INT.06).
+        
+        **Важно:** Запрос обрабатывается асинхронно. В ответе возвращается идентификатор запроса (requestId)
+        для последующей проверки статуса через GET /api/v1/requests/{requestId}.
+      operationId: createSyncRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestPayload'
+            examples:
+              type01_new_gtin:
+                summary: TYPE.01 - Новый GTIN
+                value:
+                  operationType: "TYPE.01"
+                  initiatedAt: "2024-01-15T10:30:00Z"
+                  payload:
+                    ownerInn: "1234567890"
+                    gtin: "04630012345678"
+                    status: "Черновик"
+                  metadata:
+                    userId: "user123"
+                    sessionId: "session-abc"
+                    userAction: "CREATE_PRODUCT_CARD"
+              type04_status_change:
+                summary: TYPE.04 - Изменение статуса GTIN
+                value:
+                  operationType: "TYPE.04"
+                  initiatedAt: "2024-01-15T11:00:00Z"
+                  payload:
+                    ownerInn: "1234567890"
+                    gtin: "04630012345678"
+                    status: "Опубликована"
+                  metadata:
+                    userId: "user123"
+                    sessionId: "session-abc"
+                    userAction: "PUBLISH_PRODUCT_CARD"
+              type06_new_subaccount:
+                summary: TYPE.06 - Новый субаккаунт (черновик)
+                value:
+                  operationType: "TYPE.06"
+                  initiatedAt: "2024-01-15T12:00:00Z"
+                  payload:
+                    ownerInn: "1234567890"
+                    gtin: "04630012345678"
+                    subaccounts:
+                      - inn: "0987654321"
+                        kpp: "123456789"
+                    subaccountsAction: "ADD"
+                  metadata:
+                    userId: "user123"
+                    sessionId: "session-abc"
+                    userAction: "ADD_SUBACCOUNT"
+              int02_bind_nomenclature:
+                summary: INT.02 - Привязка номенклатуры
+                value:
+                  operationType: "INT.02"
+                  initiatedAt: "2024-01-15T13:00:00Z"
+                  payload:
+                    ownerInn: "1234567890"
+                    gtin: "04630012345678"
+                    productItemId: "550e8400-e29b-41d4-a716-446655440000"
+                  metadata:
+                    userId: "user123"
+                    sessionId: "session-abc"
+                    userAction: "BIND_NOMENCLATURE"
+              int03_validate_version:
+                summary: INT.03 - Проверка версии номенклатуры
+                value:
+                  operationType: "INT.03"
+                  initiatedAt: "2024-01-15T14:00:00Z"
+                  payload:
+                    ownerInn: "1234567890"
+                    validationType: "HISTORICAL"
+                    cardStatus: "MODERATION"
+                    productItemId: "550e8400-e29b-41d4-a716-446655440000"
+                    uuid: "550e8400-e29b-41d4-a716-446655440001"
+                    subaccountInn: "0987654321"
+                  metadata:
+                    userId: "user123"
+                    sessionId: "session-abc"
+                    userAction: "VALIDATE_VERSION"
+      responses:
+        '202':
+          description: Запрос успешно принят в обработку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestAcceptedResponse'
+              examples:
+                success:
+                  summary: Успешный ответ
+                  value:
+                    requestId: "550e8400-e29b-41d4-a716-446655440000"
+                    status: "ACCEPTED"
+                    message: "Запрос принят в обработку"
+                    timestamp: "2024-01-15T10:30:01Z"
+                    estimatedProcessingTime: 300
+                    statusCheckUrl: "https://vetis-api.ru/api/v1/requests/550e8400-e29b-41d4-a716-446655440000"
+                    nextStatusCheckAfter: "2024-01-15T10:35:00Z"
+                    operationType: "TYPE.01"
+        '400':
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validation_error:
+                  summary: Ошибка валидации
+                  value:
+                    errorCode: "VALIDATION_ERROR"
+                    message: "Неверный формат запроса"
+                    details: "Поле 'ownerInn' обязательно для операции TYPE.01"
+                    timestamp: "2024-01-15T10:30:01Z"
+        '429':
+          description: Превышен лимит запросов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                rate_limit:
+                  summary: Превышение лимита
+                  value:
+                    errorCode: "RATE_LIMIT_EXCEEDED"
+                    message: "Превышен лимит запросов"
+                    details: "Допустимо не более 100 запросов в минуту"
+                    timestamp: "2024-01-15T10:30:01Z"
+                    retryAfter: 60
+        '503':
+          description: Сервис временно недоступен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                service_unavailable:
+                  summary: Сервис недоступен
+                  value:
+                    errorCode: "SERVICE_UNAVAILABLE"
+                    message: "Сервис временно недоступен"
+                    details: "Ведутся технические работы. Повторите запрос позже."
+                    timestamp: "2024-01-15T10:30:01Z"
+                    retryAfter: 300
+      security:
+        - apiKey: []
+        - bearerAuth: []
+
+  /api/v1/requests/{requestId}:
+    get:
+      tags:
+        - status
+      summary: Получение статуса и результатов обработки запроса
+      description: |
+        Метод для проверки статуса обработки асинхронного запроса.
+        Возвращает текущий статус, прогресс обработки и результаты (в случае завершения).
+        
+        **Опциональные параметры:**
+        - `includeDetails` - включить детальную информацию о шагах обработки
+        - `waitForCompletion` - ожидать завершения обработки (макс. 30 секунд)
+      operationId: getRequestStatus
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Идентификатор запроса, полученный при создании
+        - name: includeDetails
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Включить детальную информацию о шагах обработки
+        - name: waitForCompletion
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 0
+          description: Время ожидания завершения обработки (секунды, максимум 30)
+      responses:
+        '200':
+          description: Информация о статусе запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStatusResponse'
+              examples:
+                in_progress:
+                  summary: Запрос в обработке
+                  value:
+                    requestId: "550e8400-e29b-41d4-a716-446655440000"
+                    operationType: "TYPE.01"
+                    status: "IN_PROGRESS"
+                    progress: 60
+                    currentStep: "VALIDATING_DATA"
+                    message: "Идет валидация данных в системе Меркурий"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    updatedAt: "2024-01-15T10:31:00Z"
+                    estimatedCompletionAt: "2024-01-15T10:35:00Z"
+                    details:
+                      processedItems: 1
+                      totalItems: 1
+                      stepDetails:
+                        name: "Валидация данных"
+                        description: "Проверка справочных значений уровней позиционирования"
+                        startedAt: "2024-01-15T10:30:45Z"
+                completed_success:
+                  summary: Запрос успешно завершен
+                  value:
+                    requestId: "550e8400-e29b-41d4-a716-446655440000"
+                    operationType: "TYPE.01"
+                    status: "COMPLETED_SUCCESS"
+                    message: "Номенклатура успешно создана в системе Меркурий"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    completedAt: "2024-01-15T10:34:30Z"
+                    results:
+                      summary:
+                        totalProcessed: 1
+                        successful: 1
+                        failed: 0
+                        warnings: 0
+                      items:
+                        - gtin: "04630012345678"
+                          status: "SUCCESS"
+                          mercuryId: "MERC-12345-ABCD"
+                          productItemId: "550e8400-e29b-41d4-a716-446655440001"
+                          uuid: "550e8400-e29b-41d4-a716-446655440002"
+                          action: "CREATED"
+                          timestamp: "2024-01-15T10:34:15Z"
+                          details: "Номенклатура создана со статусом 'Черновик'"
+                    details:
+                      mercuryBatchId: "BATCH-2024-001"
+                      processingTimeMs: 270000
+                completed_with_errors:
+                  summary: Запрос завершен с ошибками
+                  value:
+                    requestId: "550e8400-e29b-41d4-a716-446655440000"
+                    operationType: "TYPE.01"
+                    status: "COMPLETED_WITH_ERRORS"
+                    message: "Найдено несколько номенклатур для указанного GTIN"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    completedAt: "2024-01-15T10:32:45Z"
+                    results:
+                      summary:
+                        totalProcessed: 1
+                        successful: 0
+                        failed: 1
+                        warnings: 0
+                      items:
+                        - gtin: "04630012345678"
+                          status: "FAILED"
+                          timestamp: "2024-01-15T10:32:30Z"
+                          error:
+                            code: "DUPLICATE_NOMENCLATURE"
+                            message: "Найдено несколько номенклатур для GTIN"
+                            details: "Для GTIN 04630012345678 найдено 3 номенклатуры"
+                            severity: "BLOCKER"
+                            resolution: "CHOOSE_PRODUCT_ITEM"
+                            productItemIds:
+                              - "550e8400-e29b-41d4-a716-446655440001"
+                              - "550e8400-e29b-41d4-a716-446655440002"
+                              - "550e8400-e29b-41d4-a716-446655440003"
+                failed:
+                  summary: Запрос завершился неудачей
+                  value:
+                    requestId: "550e8400-e29b-41d4-a716-446655440000"
+                    operationType: "TYPE.01"
+                    status: "FAILED"
+                    message: "Ошибка валидации данных"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    failedAt: "2024-01-15T10:31:15Z"
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "Указанное справочное значение отсутствует в системе"
+                      details: "Справочное значение 'Молоко пастеризованное' не найдено в справочнике продукции ВетИС"
+                      severity: "ERROR"
+                      retryable: true
+                      suggestedRetryAfter: "2024-01-15T11:00:00Z"
+        '404':
+          description: Запрос не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                not_found:
+                  summary: Запрос не найден
+                  value:
+                    errorCode: "REQUEST_NOT_FOUND"
+                    message: "Запрос с указанным идентификатором не найден"
+                    details: "Запрос 550e8400-e29b-41d4-a716-446655440000 не существует или был удален"
+                    timestamp: "2024-01-15T10:30:01Z"
+        '410':
+          description: Результаты запроса были очищены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                gone:
+                  summary: Результаты удалены
+                  value:
+                    errorCode: "REQUEST_EXPIRED"
+                    message: "Результаты запроса были очищены"
+                    details: "Результаты запроса хранятся 30 дней. Запрос был создан 2023-12-01T10:30:00Z"
+                    timestamp: "2024-01-15T10:30:01Z"
+      security:
+        - apiKey: []
+        - bearerAuth: []
+
+components:
+  schemas:
+    # ========== Основные схемы запросов ==========
+    RequestPayload:
+      type: object
+      required:
+        - operationType
+        - initiatedAt
+        - payload
+      properties:
+        operationType:
+          type: string
+          enum:
+            - TYPE.01
+            - TYPE.02
+            - TYPE.03
+            - TYPE.04
+            - TYPE.05
+            - TYPE.06
+            - TYPE.07
+            - TYPE.08
+            - TYPE.09
+            - TYPE.10
+            - TYPE.11
+            - TYPE.12
+            - TYPE.15
+            - INT.02
+            - INT.03
+            - INT.03_SUB
+            - INT.05
+            - INT.06
+          description: Тип операции согласно спецификации
+          example: "TYPE.01"
+        initiatedAt:
+          type: string
+          format: date-time
+          description: Дата и время инициации запроса в НКМТ
+          example: "2024-01-15T10:30:00Z"
+        payload:
+          $ref: '#/components/schemas/OperationPayload'
+        callbackUrl:
+          type: string
+          format: uri
+          description: URL для callback уведомлений (опционально)
+          example: "https://nkmt-api.ru/callbacks/status"
+        metadata:
+          $ref: '#/components/schemas/RequestMetadata'
+
+    OperationPayload:
+      type: object
+      properties:
+        # Основные идентификаторы
+        ownerInn:
+          type: string
+          pattern: '^\d{10}|\d{12}$'
+          description: ИНН владельца GTIN (10 или 12 цифр)
+          example: "1234567890"
+        newOwnerInn:
+          type: string
+          pattern: '^\d{10}|\d{12}$'
+          description: Новый ИНН владельца (для операций реорганизации)
+          example: "1111111111"
+        gtin:
+          oneOf:
+            - type: string
+              pattern: '^\d{14}$'
+              description: Один GTIN (14 цифр)
+              example: "04630012345678"
+            - type: array
+              items:
+                type: string
+                pattern: '^\d{14}$'
+              description: Список GTIN
+              example: ["04630012345678", "04630087654321"]
+        productItemId:
+          type: string
+          format: uuid
+          description: GUID номенклатуры из ВетИС (ProductItem.guid)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        uuid:
+          type: string
+          format: uuid
+          description: UUID версии номенклатуры из ВетИС
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        productItemIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Список GUID номенклатур для выбора УОТом
+          example: ["550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440002"]
+        status:
+          type: string
+          enum:
+            - Черновик
+            - На_модерации
+            - Требует_изменений
+            - Ожидает_подписания
+            - Опубликована
+            - В_архиве
+            - Аннулирована
+          description: Статус карточки/номенклатуры
+          example: "Черновик"
+        
+        # Данные для субаккаунтов
+        subaccounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subaccount'
+          description: Список субаккаунтов
+          example:
+            - inn: "0987654321"
+              kpp: "123456789"
+              action: "ACTIVATE"
+        
+        # Дополнительные параметры
+        subaccountsAction:
+          type: string
+          enum: [ADD, REPLACE, REMOVE]
+          description: Действие со списком субаккаунтов
+          example: "ADD"
+        validationType:
+          type: string
+          enum: [HISTORICAL, NEW]
+          description: Тип проверки версии (для INT.03)
+          example: "HISTORICAL"
+        cardStatus:
+          type: string
+          enum: [MODERATION, SIGNED]
+          description: Статус карточки для проверки версии
+          example: "MODERATION"
+        
+        # Позиционирование (для сценария 2.1)
+        positioningLevels:
+          $ref: '#/components/schemas/PositioningLevels'
+        
+        # Идентификаторы запроса
+        requestId:
+          type: string
+          description: Идентификатор запроса для обновления
+          example: "req_12345"
+        stpTicketId:
+          type: string
+          description: Номер обращения в СТП Меркурий
+          example: "STP-12345"
+        
+        # Для INT.03
+        subaccountInn:
+          type: string
+          pattern: '^\d{10}|\d{12}$'
+          description: ИНН субаккаунта (для INT.03)
+          example: "0987654321"
+
+    Subaccount:
+      type: object
+      required: [inn]
+      properties:
+        inn:
+          type: string
+          pattern: '^\d{10}|\d{12}$'
+          description: ИНН субаккаунта
+          example: "0987654321"
+        kpp:
+          type: string
+          pattern: '^\d{9}$'
+          description: КПП субаккаунта
+          example: "123456789"
+        action:
+          type: string
+          enum: [ACTIVATE, DEACTIVATE, BLOCK]
+          description: Действие для субаккаунта
+          example: "ACTIVATE"
+
+    PositioningLevels:
+      type: object
+      properties:
+        level1:
+          type: string
+          description: Уровень 1 - тип продукции
+          example: "Молоко и молочная продукция"
+        level2:
+          type: string
+          description: Уровень 2 - продукция
+          example: "Молоко питьевое"
+        level3:
+          type: string
+          description: Уровень 3 - вид продукции
+          example: "Молоко питьевое пастеризованное"
+        level4:
+          type: string
+          description: Уровень 4 - номенклатура
+          example: "Молоко пастеризованное 3,2%"
+
+    RequestMetadata:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: Идентификатор пользователя в НКМТ
+          example: "user123"
+        sessionId:
+          type: string
+          description: Идентификатор сессии
+          example: "session-abc-123"
+        sourceSystem:
+          type: string
+          default: "NKMT"
+          example: "NKMT"
+        userAction:
+          type: string
+          description: Действие пользователя (создание, изменение, публикация и т.д.)
+          example: "CREATE_PRODUCT_CARD"
+        requestSource:
+          type: string
+          enum: [USER, MODERATOR, STP, SYSTEM]
+          default: "USER"
+          example: "USER"
+
+    # ========== Ответы ==========
+    RequestAcceptedResponse:
+      type: object
+      required:
+        - requestId
+        - status
+        - timestamp
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Идентификатор созданного запроса
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        status:
+          type: string
+          enum: [ACCEPTED]
+          description: Статус запроса
+          example: "ACCEPTED"
+        message:
+          type: string
+          description: Сообщение для пользователя
+          example: "Запрос принят в обработку"
+        timestamp:
+          type: string
+          format: date-time
+          description: Время формирования ответа
+          example: "2024-01-15T10:30:01Z"
+        estimatedProcessingTime:
+          type: integer
+          minimum: 0
+          description: Оценочное время обработки в секундах
+          example: 300
+        statusCheckUrl:
+          type: string
+          format: uri
+          description: URL для проверки статуса
+          example: "https://vetis-api.ru/api/v1/requests/550e8400-e29b-41d4-a716-446655440000"
+        nextStatusCheckAfter:
+          type: string
+          format: date-time
+          description: Рекомендуемое время следующей проверки статуса
+          example: "2024-01-15T10:35:00Z"
+        operationType:
+          type: string
+          description: Тип операции запроса
+          example: "TYPE.01"
+
+    RequestStatusResponse:
+      type: object
+      required:
+        - requestId
+        - operationType
+        - status
+        - createdAt
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Идентификатор запроса
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        operationType:
+          type: string
+          description: Тип операции запроса
+          example: "TYPE.01"
+        status:
+          type: string
+          enum:
+            - PENDING
+            - IN_PROGRESS
+            - COMPLETED_SUCCESS
+            - COMPLETED_WITH_ERRORS
+            - FAILED
+            - CANCELLED
+            - TIMEOUT
+            - RETRYING
+          description: Текущий статус обработки запроса
+          example: "IN_PROGRESS"
+        message:
+          type: string
+          description: Человекочитаемое сообщение о статусе
+          example: "Идет валидация данных в системе Меркурий"
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Процент выполнения (0-100)
+          example: 60
+        currentStep:
+          type: string
+          description: Текущий шаг обработки
+          example: "VALIDATING_DATA"
+        createdAt:
+          type: string
+          format: date-time
+          description: Время создания запроса
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Время последнего обновления статуса
+          example: "2024-01-15T10:31:00Z"
+        completedAt:
+          type: string
+          format: date-time
+          description: Время завершения обработки
+          example: "2024-01-15T10:34:30Z"
+        failedAt:
+          type: string
+          format: date-time
+          description: Время возникновения ошибки
+          example: "2024-01-15T10:31:15Z"
+        estimatedCompletionAt:
+          type: string
+          format: date-time
+          description: Оценочное время завершения обработки
+          example: "2024-01-15T10:35:00Z"
+        
+        # Детали обработки
+        details:
+          $ref: '#/components/schemas/ProcessingDetails'
+        
+        # Результаты обработки
+        results:
+          $ref: '#/components/schemas/ProcessingResults'
+        
+        # Ошибки
+        error:
+          $ref: '#/components/schemas/ProcessingError'
+
+    ProcessingDetails:
+      type: object
+      properties:
+        processedItems:
+          type: integer
+          minimum: 0
+          description: Количество обработанных элементов
+          example: 1
+        totalItems:
+          type: integer
+          minimum: 0
+          description: Общее количество элементов для обработки
+          example: 1
+        stepDetails:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Название текущего шага
+              example: "Валидация данных"
+            description:
+              type: string
+              description: Описание шага
+              example: "Проверка справочных значений уровней позиционирования"
+            startedAt:
+              type: string
+              format: date-time
+              description: Время начала шага
+              example: "2024-01-15T10:30:45Z"
+            completedAt:
+              type: string
+              format: date-time
+              description: Время завершения шага
+              example: "2024-01-15T10:31:15Z"
+        mercuryBatchId:
+          type: string
+          description: Идентификатор пакета в системе Меркурий
+          example: "BATCH-2024-001"
+        stpTicketId:
+          type: string
+          description: Номер обращения в СТП Меркурий (если создано)
+          example: "STP-12345"
+        processingTimeMs:
+          type: integer
+          description: Время обработки в миллисекундах
+          example: 270000
+
+    ProcessingResults:
+      type: object
+      properties:
+        summary:
+          $ref: '#/components/schemas/ResultsSummary'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultItem'
+          description: Детальные результаты по элементам
+        partialSuccess:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultItem'
+          description: Частично успешные результаты
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+          description: Предупреждения
+
+    ResultsSummary:
+      type: object
+      required:
+        - totalProcessed
+        - successful
+        - failed
+      properties:
+        totalProcessed:
+          type: integer
+          minimum: 0
+          description: Всего обработано элементов
+          example: 1
+        successful:
+          type: integer
+          minimum: 0
+          description: Успешно обработано
+          example: 1
+        failed:
+          type: integer
+          minimum: 0
+          description: Завершилось ошибкой
+          example: 0
+        warnings:
+          type: integer
+          minimum: 0
+          description: Количество предупреждений
+          example: 0
+
+    ResultItem:
+      type: object
+      required:
+        - gtin
+        - status
+      properties:
+        gtin:
+          type: string
+          pattern: '^\d{14}$'
+          description: GTIN товара
+          example: "04630012345678"
+        status:
+          type: string
+          enum: [SUCCESS, FAILED, PARTIAL, WARNING]
+          description: Статус обработки элемента
+          example: "SUCCESS"
+        mercuryId:
+          type: string
+          description: Идентификатор в системе Меркурий
+          example: "MERC-12345-ABCD"
+        productItemId:
+          type: string
+          format: uuid
+          description: GUID номенклатуры
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        uuid:
+          type: string
+          format: uuid
+          description: UUID версии номенклатуры
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        action:
+          type: string
+          enum: [CREATED, UPDATED, BLOCKED, UNBLOCKED, DELETED, SYNCHRONIZED]
+          description: Выполненное действие
+          example: "CREATED"
+        timestamp:
+          type: string
+          format: date-time
+          description: Время выполнения действия
+          example: "2024-01-15T10:34:15Z"
+        details:
+          type: string
+          description: Детальное описание результата
+          example: "Номенклатура создана со статусом 'Черновик'"
+        error:
+          $ref: '#/components/schemas/ProcessingError'
+
+    Warning:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Код предупреждения
+          example: "DEPRECATED_VALUE"
+        message:
+          type: string
+          description: Текст предупреждения
+          example: "Используется устаревшее справочное значение"
+        details:
+          type: string
+          description: Детали предупреждения
+          example: "Значение будет удалено из справочника 2024-06-01"
+        severity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+          description: Уровень серьезности
+          example: "LOW"
+
+    ProcessingError:
+      type: object
+      required:
+        - code
+        - message
+        - severity
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - DUPLICATE_NOMENCLATURE
+            - SYSTEM_UNAVAILABLE
+            - TECHNICAL_ERROR
+            - NOT_FOUND
+            - UNAUTHORIZED
+            - TIMEOUT
+            - RATE_LIMIT_EXCEEDED
+          description: Код ошибки
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Текст ошибки
+          example: "Указанное справочное значение отсутствует в системе"
+        details:
+          type: string
+          description: Детальное описание ошибки
+          example: "Справочное значение 'Молоко пастеризованное' не найдено в справочнике продукции ВетИС"
+        severity:
+          type: string
+          enum: [INFO, WARNING, ERROR, BLOCKER]
+          description: Уровень серьезности ошибки
+          example: "ERROR"
+        retryable:
+          type: boolean
+          description: Можно ли повторить запрос
+          example: true
+        suggestedRetryAfter:
+          type: string
+          format: date-time
+          description: Рекомендуемое время повторной попытки
+          example: "2024-01-15T11:00:00Z"
+        resolution:
+          type: string
+          enum: [RETRY, CONTACT_STP, UPDATE_DATA, CHOOSE_PRODUCT_ITEM]
+          description: Рекомендуемое действие для разрешения
+          example: "UPDATE_DATA"
+        stpTicketId:
+          type: string
+          description: Номер обращения в СТП (если создано)
+          example: "STP-12345"
+        productItemIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Список GUID номенклатур для выбора (при DUPLICATE_NOMENCLATURE)
+          example: ["550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440002"]
+
+    ErrorResponse:
+      type: object
+      required:
+        - errorCode
+        - message
+        - timestamp
+      properties:
+        errorCode:
+          type: string
+          description: Код ошибки
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Сообщение об ошибке
+          example: "Неверный формат запроса"
+        details:
+          type: string
+          description: Детали ошибки
+          example: "Поле 'ownerInn' обязательно для операции TYPE.01"
+        timestamp:
+          type: string
+          format: date-time
+          description: Время возникновения ошибки
+          example: "2024-01-15T10:30:01Z"
+        retryAfter:
+          type: integer
+          description: Время в секундах до следующей попытки
+          example: 60
+
+  # ========== Security Schemes ==========
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API ключ для аутентификации НКМТ
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен для аутентификации
+
+  # ========== Примеры запросов для каждого типа операции ==========
+  examples:
+    Type01Example:
+      summary: TYPE.01 - Новый GTIN
+      value:
+        operationType: "TYPE.01"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          status: "Черновик"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "CREATE_PRODUCT_CARD"
+    
+    Type02Example:
+      summary: TYPE.02 - Новый GTIN (Подтверждено УОТом)
+      value:
+        operationType: "TYPE.02"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          productItemId: "550e8400-e29b-41d4-a716-446655440000"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "CONFIRM_NOMENCLATURE"
+    
+    Type04Example:
+      summary: TYPE.04 - Изменение статуса GTIN
+      value:
+        operationType: "TYPE.04"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          status: "Опубликована"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "PUBLISH_PRODUCT_CARD"
+    
+    Type06Example:
+      summary: TYPE.06 - Новый субаккаунт (карточка в статусе "Черновик")
+      value:
+        operationType: "TYPE.06"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          subaccounts:
+            - inn: "0987654321"
+              kpp: "123456789"
+          subaccountsAction: "ADD"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "ADD_SUBACCOUNT"
+    
+    Type09Example:
+      summary: TYPE.09 - Новый субаккаунт (карточка в статусе "Опубликована")
+      value:
+        operationType: "TYPE.09"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          status: "Опубликована"
+          subaccounts:
+            - inn: "0987654321"
+              kpp: "123456789"
+          subaccountsAction: "ADD"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "ADD_SUBACCOUNT_TO_PUBLISHED"
+    
+    Type11Example:
+      summary: TYPE.11 - Публикация карточки GTIN с атрибутами и субаккаунтами
+      value:
+        operationType: "TYPE.11"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          status: "Опубликована"
+          subaccounts:
+            - inn: "0987654321"
+              kpp: "123456789"
+          productItemId: "550e8400-e29b-41d4-a716-446655440000"
+          uuid: "550e8400-e29b-41d4-a716-446655440001"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "PUBLISH_WITH_SUBACCOUNTS"
+    
+    Int02Example:
+      summary: INT.02 - Привязка существующей номенклатуры к карточке
+      value:
+        operationType: "INT.02"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: "04630012345678"
+          productItemId: "550e8400-e29b-41d4-a716-446655440000"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "BIND_NOMENCLATURE"
+    
+    Int03Example:
+      summary: INT.03 - Проверка версии номенклатуры (исторические данные)
+      value:
+        operationType: "INT.03"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          validationType: "HISTORICAL"
+          cardStatus: "MODERATION"
+          productItemId: "550e8400-e29b-41d4-a716-446655440000"
+          uuid: "550e8400-e29b-41d4-a716-446655440001"
+          subaccountInn: "0987654321"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "VALIDATE_VERSION"
+    
+    Int03NewExample:
+      summary: INT.03 - Проверка версии номенклатуры (новые данные)
+      value:
+        operationType: "INT.03"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          validationType: "NEW"
+          cardStatus: "MODERATION"
+          gtin: "04630012345678"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "VALIDATE_NEW_VERSION"
+    
+    Int05Example:
+      summary: INT.05 - Получение атрибутов номенклатуры по ProductItem ID
+      value:
+        operationType: "INT.05"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          productItemId: "550e8400-e29b-41d4-a716-446655440000"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "GET_NOMENCLATURE_ATTRIBUTES"
+    
+    Int06Example:
+      summary: INT.06 - Обновление номенклатуры субаккаунтов при изменениях GTIN
+      value:
+        operationType: "INT.06"
+        initiatedAt: "2024-01-15T10:30:00Z"
+        payload:
+          ownerInn: "1234567890"
+          gtin: ["04630012345678", "04630087654321"]
+          subaccounts:
+            - inn: "0987654321"
+              kpp: "123456789"
+              action: "ACTIVATE"
+            - inn: "1122334455"
+              kpp: "667788990"
+              action: "DEACTIVATE"
+        metadata:
+          userId: "user123"
+          sessionId: "session-abc"
+          userAction: "UPDATE_SUBACCOUNTS"
