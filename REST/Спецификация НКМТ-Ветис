@@ -452,6 +452,110 @@ paths:
         - apiKey: []
         - bearerAuth: []
 
+    get:
+      tags:
+        - requests
+      summary: Поиск запросов по критериям
+      description: |
+        Метод для поиска запросов по различным критериям фильтрации.
+        Поддерживает пагинацию и сортировку.
+      operationId: searchRequests
+      parameters:
+        - name: operationType
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фильтр по типу операции
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фильтр по статусу запроса
+        - name: ownerInn
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фильтр по ИНН владельца
+        - name: createdAfter
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Запросы созданные после указанной даты
+        - name: createdBefore
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Запросы созданные до указанной даты
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Номер страницы (начиная с 1)
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Размер страницы (1-100)
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [createdAt, updatedAt, status]
+            default: "createdAt"
+          description: Поле для сортировки
+        - name: sortOrder
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: "desc"
+          description: Порядок сортировки
+      responses:
+        '200':
+          description: Список запросов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RequestStatusResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '400':
+          description: Неверные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Неавторизованный доступ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - apiKey: []
+        - bearerAuth: []
+
   /api/v1/requests/{requestId}:
     get:
       tags:
@@ -686,111 +790,6 @@ paths:
                     timestamp: "2024-01-15T10:30:01Z"
         '500':
           description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-      security:
-        - apiKey: []
-        - bearerAuth: []
-
-  /api/v1/requests:
-    get:
-      tags:
-        - requests
-      summary: Поиск запросов по критериям
-      description: |
-        Метод для поиска запросов по различным критериям фильтрации.
-        Поддерживает пагинацию и сортировку.
-      operationId: searchRequests
-      parameters:
-        - name: operationType
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Фильтр по типу операции
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Фильтр по статусу запроса
-        - name: ownerInn
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Фильтр по ИНН владельца
-        - name: createdAfter
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date-time
-          description: Запросы созданные после указанной даты
-        - name: createdBefore
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date-time
-          description: Запросы созданные до указанной даты
-        - name: page
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-          description: Номер страницы (начиная с 1)
-        - name: pageSize
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-          description: Размер страницы (1-100)
-        - name: sortBy
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [createdAt, updatedAt, status]
-            default: "createdAt"
-          description: Поле для сортировки
-        - name: sortOrder
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [asc, desc]
-            default: "desc"
-          description: Порядок сортировки
-      responses:
-        '200':
-          description: Список запросов
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  requests:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/RequestStatusResponse'
-                  pagination:
-                    $ref: '#/components/schemas/PaginationInfo'
-        '400':
-          description: Неверные параметры запроса
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Неавторизованный доступ
           content:
             application/json:
               schema:
